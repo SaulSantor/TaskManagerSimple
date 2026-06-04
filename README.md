@@ -1,31 +1,47 @@
 # Task Manager Simple - Serverless en Vercel
 
-Esta versión migra la app legacy monolítica a una arquitectura Serverless en Vercel. El frontend sigue siendo JavaScript puro, pero ahora consume endpoints independientes bajo `/api` en lugar de depender de `localStorage`.
+Esta versión migra la app legacy monolítica a una arquitectura Serverless en Vercel.
+El frontend sigue siendo JavaScript puro y usa localStorage como fuente de verdad,
+mientras que los endpoints bajo `/api` actúan como validadores y procesadores stateless.
 
 ## Por qué Serverless
 
-Serverless encaja mejor que el monolito original porque escala por función, no exige mantener un servidor persistente, cobra por uso y se integra de forma natural con despliegues automáticos desde GitHub a Vercel.
+Serverless encaja mejor que el monolito original porque escala por función, no exige
+mantener un servidor persistente, cobra por uso y se integra de forma natural con
+despliegues automáticos desde GitHub a Vercel.
 
 ## Arquitectura
 
 ```text
-Browser
+Browser (localStorage como fuente de verdad)
    -> index.html + style.css
-   -> js/api.js
-   -> js/ui.js
-   -> js/app.js
-   -> /api/auth/login
-   -> /api/tasks
-   -> /api/tasks/:id
-   -> /api/projects
+   -> js/api.js     (lee/escribe localStorage, llama a /api para validar)
+   -> js/ui.js      (renderizado del DOM)
+   -> js/app.js     (orquestación)
+        |
+        v
+   Funciones Serverless (stateless - solo validan y procesan)
+   -> /api/auth/login       (valida credenciales)
+   -> /api/tasks            (valida y formatea tareas)
+   -> /api/tasks/:id        (valida updates y deletes)
+   -> /api/projects         (valida y formatea proyectos)
    -> /api/projects/:id
-   -> /api/comments
-   -> /api/history
-   -> /api/notifications
-   -> /api/reports
-   -> Vercel KV (si está configurado)
-   -> fallback en memoria por función (demo)
+   -> /api/comments         (valida comentarios)
+   -> /api/history          (valida entradas de historial)
+   -> /api/notifications    (valida notificaciones)
+   -> /api/reports          (genera reportes en texto)
 ```
+
+## Cómo funciona la persistencia
+
+A diferencia del monolito original donde todo vivía en un solo `app.js`,
+ahora la responsabilidad está separada:
+
+- **localStorage** → guarda todos los datos en el navegador (tareas, proyectos, comentarios, etc.)
+- **Funciones serverless** → reciben datos del frontend, los validan, asignan IDs y timestamps, y regresan el resultado
+- **El frontend** → guarda el resultado de vuelta en localStorage
+
+Esto permite que los datos persistan entre recargas sin necesitar una base de datos externa.
 
 ## Funcionalidades mantenidas
 
@@ -37,25 +53,12 @@ Browser
 - Búsqueda avanzada
 - Reportes y exportación CSV
 
-## Variables de entorno
-
-No son necesarias para el modo demo.
-
-Si configuras una base compartida, el proyecto ya está preparado para Vercel KV:
-
-- `KV_REST_API_URL`
-- `KV_REST_API_TOKEN`
-
 ## Deploy
 
 1. Sube el proyecto a GitHub.
 2. Importa el repositorio en [vercel.com](https://vercel.com).
 3. Vercel detectará `api/` y desplegará las funciones serverless automáticamente.
 4. Cada push a la rama principal publicará una nueva versión.
-
-## Nota importante
-
-Si no configuras Vercel KV, cada función usa un store en memoria simulado e independiente. Eso sirve para demo y desarrollo rápido, pero no da persistencia real entre funciones ni entre invocaciones frías.
 
 ## Estructura
 
@@ -64,22 +67,23 @@ TaskManagerSimple/
 ├── index.html
 ├── style.css
 ├── vercel.json
+├── package.json
 ├── README.md
 ├── js/
-│   ├── api.js
-│   ├── ui.js
-│   └── app.js
+│   ├── api.js       (cliente: localStorage + llamadas a /api)
+│   ├── ui.js        (renderizado DOM)
+│   └── app.js       (orquestación y eventos)
 └── api/
-      ├── _shared.js
-      ├── auth/login.js
-      ├── tasks/index.js
-      ├── tasks/[id].js
-      ├── projects/index.js
-      ├── projects/[id].js
-      ├── comments/index.js
-      ├── notifications/index.js
-      ├── history/index.js
-      └── reports/index.js
+    ├── _shared.js           (helpers: CORS, parseBody, send)
+    ├── auth/login.js
+    ├── tasks/index.js
+    ├── tasks/[id].js
+    ├── projects/index.js
+    ├── projects/[id].js
+    ├── comments/index.js
+    ├── notifications/index.js
+    ├── history/index.js
+    └── reports/index.js
 ```
 
 ## Limitaciones conocidas (ambiente demo)
@@ -88,3 +92,4 @@ TaskManagerSimple/
 - Token de sesión simulado (en producción: JWT)
 - CORS abierto (en producción: restringir al dominio)
 - Datos en localStorage (en producción: base de datos persistente como Supabase)
+- Los datos son por navegador — cada usuario ve sus propios datos locales
